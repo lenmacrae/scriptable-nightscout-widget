@@ -13,8 +13,11 @@
 const nsUrl =`https://your-nightscout-url`; // your nightscout url
 const nsToken =`your-nightscout-token`; // your nightscoutaccess token
 const glucoseDisplay = `mgdl`;
-//const glucoseDisplay = `mmoll`;
-const dateFormat  = `en-US`;
+//const glucoseDisplay = 'mgdl' or `mmoll`;
+const dateFormat  = `en-US`;// 
+// define out of range values
+const lowvalue = 4;
+const highvalue = 8;
 
 // Initialize Widget
 let widget = await createWidget();
@@ -29,37 +32,52 @@ Script.complete();
 async function createWidget(items) {
     const list = new ListWidget();
     
-    let header, glucose, iob, cob, updated;
-    
-	let nsDataV2 = await getNsDataV2();
+let header, glucose, iob, cob, updated;
+let nsDataV2 = await getNsDataV2();
    
-    // create direction arrow
-    let directionString = await getDirectionString(nsDataV2.direction);
+// create direction arrow
+let directionString = await getDirectionString(nsDataV2.direction);
     
-    header = list.addText("Nightscout".toUpperCase());
-    header.font = Font.mediumSystemFont(10);
-  
-    let glucoseValue = nsDataV2.bg;		
-	
-	if(glucoseDisplay === `mmoll`){
-		glucoseValue = Math.round(nsDataV2.bg / 18 * 100) / 100;
-	}
-	
-	
-    glucose = list.addText("" + glucoseValue + " " + directionString);
-    glucose.font = Font.mediumSystemFont(34);
-    
-    iob = list.addText("" + nsDataV2.iob);
-    iob.font = Font.mediumSystemFont(14);
-    
-    cob = list.addText("" +  nsDataV2.cob);
-    cob.font = Font.mediumSystemFont(14);
-    
-    list.addSpacer();
-    
-    let updateTime = new Date(nsDataV2.mills).toLocaleTimeString(dateFormat, { hour: "numeric", minute: "numeric" })
+header = list.addText("Nightscout");
+header.font = Font.mediumSystemFont(12);
+
+let updateTime = new Date(nsDataV2.mills).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     updated = list.addText("" + updateTime);
-    updated.font = Font.mediumSystemFont(10);
+    updated.font = Font.mediumSystemFont(12);
+// color time older than 5 minutes to show missed readings(s)
+   if((Date.now()- nsDataV2.mills) > 400000){
+      updated.textColor = Color.red();
+   }
+    
+list.addSpacer();
+  
+let glucoseValue = nsDataV2.mgdl;	
+   if(glucoseDisplay === `mmoll`){
+		glucoseValue = nsDataV2.mmoll;
+    }
+	
+	
+glucose = list.addText("" + glucoseValue + " " + directionString);
+glucose.font = Font.mediumSystemFont(46);
+
+// set color depending on glucose defaulting to in range
+   glucose.textColor = Color.green();
+
+    if(glucoseValue < lowvalue || glucoseValue > highvalue){
+        glucose.textColor = Color.red();
+    }
+    
+   list.addSpacer();
+    
+let deltaValue = nsDataV2.deltamgdl;
+   if(glucoseDisplay === 'mmoll'){
+      deltaValue = nsDataV2.deltammoll;
+   }
+ 
+   if(deltaValue>0) {deltaValue = ("+ " + deltaValue);    
+   }
+   delta = list.addText("" + deltaValue);
+   delta.font = Font.mediumSystemFont(24);
     
     
     list.refreshAfterDate = new Date(Date.now() + 60);
@@ -70,12 +88,12 @@ async function getNsDataV2() {
     let url = nsUrl + "/api/v2/properties?&token=" + nsToken;
     let data = await new Request(url).loadJSON();
 	  return {
-        bg: data.bgnow.mean,
-		direction: data.bgnow.sgvs[0].direction,
-		iob: data.iob.displayLine,
-        cob: data.cob.displayLine,
-		mills: data.bgnow.mills
-        
+	mgdl: data.bgnow.mean,
+	mmoll: data.bgnow.sgvs[0].scaled,
+	direction: data.bgnow.sgvs[0].direction,
+	deltamgdl: data.delta.mgdl,
+	deltammoll: data.delta.scaled,
+	mills: data.bgnow.mills
     };
 }
 
